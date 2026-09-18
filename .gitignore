@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.ipynb_checkpoints/
+.DS_Store
+
+results/
+data/
+search.py
+src/data_quality_bck.py
+structure.txt
