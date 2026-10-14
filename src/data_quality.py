@@ -34,6 +34,15 @@ def run_data_quality_checks(df):
 
     checks = []
 
+    if df.empty:
+        checks.append({
+            "check": "non_empty_dataset",
+            "status": "FAIL",
+            "description": "Датасет пустой"
+        })
+        print("Проверки качества данных остановлены: датасет пустой.")
+        return False, checks    
+
     # =========================
     # 1. Required columns
     # =========================
@@ -58,6 +67,10 @@ def run_data_quality_checks(df):
         "status": status,
         "description": description
     })
+
+    if missing_columns:
+        print("Проверки качества данных остановлены: отсутствуют обязательные колонки.")
+        return False, checks
 
     # =========================
     # 2. Missing values
@@ -209,6 +222,18 @@ def run_data_quality_checks(df):
         total_users * EXPECTED_GROUP_RATIO["B"]
     ]
 
+    if total_users == 0 or observed_a == 0 or observed_b == 0:
+        status = "FAIL"
+        description = "Невозможно проверить SRM: одна из групп пуста"
+        checks.append({
+            "check": "sample_ratio_mismatch",
+            "status": status,
+            "description": description
+        })
+        quality_passed = False
+        print("Проверки качества данных завершены: FAIL")
+        return quality_passed, checks
+
     srm_stat, srm_p_value = chisquare(
         f_obs=observed,
         f_exp=expected
@@ -231,12 +256,6 @@ def run_data_quality_checks(df):
             f"{EXPECTED_GROUP_RATIO['B']:.0%} "
             f"(p-value={srm_p_value:.4f})"
         )
-
-    checks.append({
-        "check": "sample_ratio_mismatch",
-        "status": status,
-        "description": description
-    })
 
     checks.append({
         "check": "sample_ratio_mismatch",
