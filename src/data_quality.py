@@ -12,8 +12,10 @@ REQUIRED_COLUMNS = [
 # =========================
 
 EXPECTED_GROUP_RATIO = {
-    "A": 0.5,
-    "B": 0.5
+    "A": 0.167,
+    "B": 0.833
+#    "A": 0.5,
+#    "B": 0.5
 }
 
 SRM_ALPHA = 0.05

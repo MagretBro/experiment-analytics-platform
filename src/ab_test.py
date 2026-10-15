@@ -1,18 +1,24 @@
+from pathlib import Path
+from datetime import datetime
+
 import pandas as pd
 from scipy.stats import norm
-from data_quality import load_experiment_data, run_data_quality_checks
-from datetime import datetime
-from pathlib import Path
-from save_results import save_ab_test_result
-from save_data_quality import save_data_quality_results
-from interpretation import generate_interpretation, save_interpretation
+from src.data_diagnostics import diagnose_dataset
+from src.data_quality import load_experiment_data, run_data_quality_checks
+from src.save_results import save_ab_test_result
+from src.save_data_quality import save_data_quality_results
+from src.interpretation import generate_interpretation, save_interpretation
 
-def create_run_folder(base_path="results"):
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+RESULTS_DIR = PROJECT_ROOT / "results"
+
+
+def create_run_folder(base_path=RESULTS_DIR):
     run_id = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-
     run_path = Path(base_path) / run_id
     run_path.mkdir(parents=True, exist_ok=True)
-
     return run_id, run_path
 
 # =========================
@@ -28,8 +34,32 @@ print(f"Результаты сохраняются в: {run_path}")
 # 2. Загрузка данных
 # =========================
 
-df = pd.read_csv("data/experiment_users.csv")
+df = load_experiment_data(DATA_DIR / "experiment_users.csv")
 
+# Этап 1. Исследование данных
+diagnostics = diagnose_dataset(
+    df,
+    metric_column="converted_observed",
+    group_column="group",
+    id_column="user_id",
+)
+
+diagnostics_path = run_path / "diagnostics.csv"
+diagnostics.to_csv(
+    diagnostics_path,
+    index=False,
+    encoding="utf-8-sig",
+)
+
+print(f"Диагностика сохранена: {diagnostics_path}")
+print("\n=== ДИАГНОСТИКА ДАННЫХ ===")
+print(
+    diagnostics[
+        ["scope", "category", "check", "value", "status", "comment"]
+    ].to_string(index=False)
+)
+
+# Этап 2. Проверка обязательных условий качества
 quality_passed, quality_checks = run_data_quality_checks(df)
 
 quality_path = save_data_quality_results(
@@ -223,3 +253,27 @@ report_path = save_interpretation(
 )
 
 print(f"Интерпретация сохранена: {report_path}")
+
+# =========================
+# 12. Человекочитаемая сводка
+# =========================
+
+human_path = run_path / "result_human.csv"
+
+with open(human_path, "w", encoding="utf-8") as f:
+    f.write("Показатель,Группа A,Группа B\n")
+    f.write(f"Пользователей,{n_a},{n_b}\n")
+    f.write(f"Конверсий,{success_a},{success_b}\n")
+    f.write(f"Конверсия,{conversion_a:.2%},{conversion_b:.2%}\n")
+    f.write("\n")
+    f.write("Показатель,Значение\n")
+    f.write(f"Абсолютный прирост (B − A),{absolute_uplift:+.2%}\n")
+    f.write(f"Относительный прирост,{relative_uplift:+.2%}\n")
+    f.write(f"Z-статистика,{z_stat:.3f}\n")
+    f.write(f"p-value,{p_value:.4f}\n")
+    f.write(f"95% CI,[{ci_lower:+.2%}; {ci_upper:+.2%}]\n")
+    f.write(f"α,{alpha}\n")
+    lines_verdict = "значимо" if statistically_significant else "НЕ значимо"
+    f.write(f"Итог,{lines_verdict}\n")
+
+print(f"Человекочитаемая сводка: {human_path}")

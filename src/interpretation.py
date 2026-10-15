@@ -1,13 +1,60 @@
 from pathlib import Path
 
 
-def format_percentage(value):
-    return f"{value:.2%}"
+# =========================
+# Форматирование
+# =========================
+
+def fmt_pct(value, digits=2):
+    """0.0525 -> '5.25%'"""
+    return f"{value * 100:.{digits}f}%"
 
 
-def format_percentage_points(value):
-    return f"{value:.2%}"
+def fmt_pp(value, digits=2):
+    """0.002 -> '+0.20 п.п.'"""
+    sign = "+" if value >= 0 else "−"
+    return f"{sign}{abs(value) * 100:.{digits}f} п.п."
 
+
+def fmt_signed_pct(value, digits=2):
+    """0.038 -> '+3.81%'"""
+    sign = "+" if value >= 0 else "−"
+    return f"{sign}{abs(value) * 100:.{digits}f}%"
+
+
+def fmt_num(value, digits=3):
+    return f"{value:.{digits}f}"
+
+
+def verdict(p_value, alpha, ci_lower, ci_upper, absolute_uplift):
+    """Возвращает человеческий вердикт."""
+    significant = p_value < alpha
+    ci_crosses_zero = ci_lower <= 0 <= ci_upper
+
+    if not significant:
+        return (
+            "НЕТ СТАТИСТИЧЕСКИ ЗНАЧИМОЙ РАЗНИЦЫ",
+            "Разница между группами может быть случайной. "
+            "Недостаточно оснований, чтобы отдать предпочтение варианту B."
+        )
+
+    if absolute_uplift > 0:
+        return (
+            "ВАРИАНТ B ЛУЧШЕ",
+            "Разница статистически значима и в пользу B. "
+            "Есть основания катить вариант B на всю аудиторию."
+        )
+
+    return (
+        "ВАРИАНТ B ХУЖЕ",
+        "Разница статистически значима, но в пользу A. "
+        "Вариант B запускать не стоит."
+    )
+
+
+# =========================
+# Генерация отчёта
+# =========================
 
 def generate_interpretation(
     run_id,
@@ -23,209 +70,162 @@ def generate_interpretation(
     p_value,
     ci_lower,
     ci_upper,
-    alpha
+    alpha,
 ):
     lines = []
 
-    # =========================
-    # Header
-    # =========================
+    title, action = verdict(p_value, alpha, ci_lower, ci_upper, absolute_uplift)
 
-    lines.append("A/B TEST REPORT")
-    lines.append("=" * 40)
+    # --------------------------------------------------
+    # Заголовок
+    # --------------------------------------------------
+    lines.append("=" * 60)
+    lines.append("ОТЧЁТ ОБ A/B-ТЕСТЕ")
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append(f"Запуск:        {run_id}")
+    lines.append(f"Уровень значимости α = {alpha}")
     lines.append("")
 
-    lines.append(f"RUN ID: {run_id}")
+    # --------------------------------------------------
+    # Что сравнивали
+    # --------------------------------------------------
+    lines.append("-" * 60)
+    lines.append("ЧТО СРАВНИВАЛИ")
+    lines.append("-" * 60)
+    lines.append("")
+    lines.append("Группа A — контрольная (то, что было).")
+    lines.append("Группа B — тестовая (новый вариант).")
+    lines.append("Метрика — конверсия: доля пользователей, совершивших целевое действие.")
     lines.append("")
 
-    # =========================
-    # Sample
-    # =========================
-
-    lines.append("SAMPLE")
-    lines.append("-" * 40)
-
-    lines.append(
-        f"Группа A: {n_a} пользователей, "
-        f"{success_a} конверсий"
-    )
-
-    lines.append(
-        f"Группа B: {n_b} пользователей, "
-        f"{success_b} конверсий"
-    )
-
+    # --------------------------------------------------
+    # Размер выборки
+    # --------------------------------------------------
+    lines.append("-" * 60)
+    lines.append("СКОЛЬКО ПОЛЬЗОВАТЕЛЕЙ")
+    lines.append("-" * 60)
+    lines.append("")
+    lines.append(f"  Группа A:  {n_a:,} чел.,  из них конвертировались: {success_a:,}")
+    lines.append(f"  Группа B:  {n_b:,} чел.,  из них конвертировались: {success_b:,}")
+    lines.append(f"  Всего:     {n_a + n_b:,} чел.")
     lines.append("")
 
-    # =========================
-    # Conversion
-    # =========================
-
-    lines.append("CONVERSION")
-    lines.append("-" * 40)
-
-    lines.append(
-        f"Конверсия A: {format_percentage(conversion_a)}"
-    )
-
-    lines.append(
-        f"Конверсия B: {format_percentage(conversion_b)}"
-    )
-
+    # --------------------------------------------------
+    # Конверсии
+    # --------------------------------------------------
+    lines.append("-" * 60)
+    lines.append("КОНВЕРСИЯ")
+    lines.append("-" * 60)
+    lines.append("")
+    lines.append(f"  Группа A:  {fmt_pct(conversion_a)}")
+    lines.append(f"  Группа B:  {fmt_pct(conversion_b)}")
     lines.append("")
 
-    # =========================
-    # Observed effect
-    # =========================
-
-    lines.append("OBSERVED EFFECT")
-    lines.append("-" * 40)
+    # --------------------------------------------------
+    # Эффект
+    # --------------------------------------------------
+    lines.append("-" * 60)
+    lines.append("ЭФФЕКТ ОТ ВНЕДРЕНИЯ ВАРИАНТА B")
+    lines.append("-" * 60)
+    lines.append("")
 
     if absolute_uplift > 0:
         lines.append(
-            f"Наблюдаемая конверсия группы B выше группы A "
-            f"на {format_percentage_points(absolute_uplift)}."
+            f"  Конверсия в B ВЫШЕ, чем в A, "
+            f"на {fmt_pp(absolute_uplift)} (абсолютный прирост)."
         )
-
     elif absolute_uplift < 0:
         lines.append(
-            f"Наблюдаемая конверсия группы A выше группы B "
-            f"на {format_percentage_points(abs(absolute_uplift))}."
+            f"  Конверсия в B НИЖЕ, чем в A, "
+            f"на {fmt_pp(absolute_uplift)} (абсолютное падение)."
         )
-
     else:
-        lines.append(
-            "Наблюдаемая конверсия групп A и B одинаковая."
-        )
-
-    lines.append(
-        f"Absolute uplift (B - A): "
-        f"{format_percentage(absolute_uplift)}"
-    )
-
-    lines.append(
-        f"Relative uplift: "
-        f"{format_percentage(relative_uplift)}"
-    )
+        lines.append("  Конверсия в A и B одинаковая.")
 
     lines.append("")
-
-    # =========================
-    # Statistics
-    # =========================
-
-    lines.append("STATISTICAL TEST")
-    lines.append("-" * 40)
-
+    lines.append(f"  Абсолютный прирост (B − A):  {fmt_pp(absolute_uplift)}")
+    lines.append(f"  Относительный прирост:       {fmt_signed_pct(relative_uplift)}")
+    lines.append("")
+    lines.append("  Что это значит:")
     lines.append(
-        f"Z-statistic: {z_stat:.3f}"
+        "    • абсолютный прирост — на сколько процентных пунктов "
+        "конверсия B больше конверсии A;"
     )
-
     lines.append(
-        f"P-value: {p_value:.4f}"
+        "    • относительный прирост — на сколько процентов "
+        "изменилась конверсия относительно A."
     )
-
-    lines.append(
-        f"Alpha: {alpha}"
-    )
-
     lines.append("")
 
-    # =========================
-    # Interpretation of p-value
-    # =========================
+    # --------------------------------------------------
+    # Статистика
+    # --------------------------------------------------
+    lines.append("-" * 60)
+    lines.append("СТАТИСТИЧЕСКАЯ ПРОВЕРКА")
+    lines.append("-" * 60)
+    lines.append("")
+    lines.append(f"  Z-статистика:  {fmt_num(z_stat)}")
+    lines.append(f"  p-value:       {fmt_num(p_value, 4)}")
+    lines.append(f"  α (порог):     {alpha}")
+    lines.append("")
 
     if p_value < alpha:
-
         lines.append(
-            f"p-value ({p_value:.4f}) меньше "
-            f"уровня значимости α = {alpha}."
+            f"  p-value ({fmt_num(p_value, 4)}) < α ({alpha}) — "
+            "разница статистически значима."
         )
-
-        lines.append(
-            "Статистически значимая разница между "
-            "группами обнаружена."
-        )
-
-        lines.append(
-            "Нулевая гипотеза отвергается "
-            "на выбранном уровне значимости."
-        )
-
     else:
-
         lines.append(
-            f"p-value ({p_value:.4f}) больше "
-            f"уровня значимости α = {alpha}."
+            f"  p-value ({fmt_num(p_value, 4)}) ≥ α ({alpha}) — "
+            "разница статистически НЕ значима."
         )
-
-        lines.append(
-            "Статистически значимой разницы между "
-            "группами не обнаружено."
-        )
-
-        lines.append(
-            "Недостаточно оснований утверждать, "
-            "что наблюдаемая разница обусловлена "
-            "эффектом варианта."
-        )
-
     lines.append("")
 
-    # =========================
-    # Confidence interval
-    # =========================
-
-    lines.append("CONFIDENCE INTERVAL")
-    lines.append("-" * 40)
-
-    lines.append(
-        f"95% CI for difference: "
-        f"[{format_percentage(ci_lower)}; "
-        f"{format_percentage(ci_upper)}]"
-    )
-
+    # --------------------------------------------------
+    # Доверительный интервал
+    # --------------------------------------------------
+    lines.append("-" * 60)
+    lines.append("95% ДОВЕРИТЕЛЬНЫЙ ИНТЕРВАЛ ДЛЯ РАЗНИЦЫ (B − A)")
+    lines.append("-" * 60)
+    lines.append("")
+    lines.append(f"  [{fmt_pp(ci_lower)} ; {fmt_pp(ci_upper)}]")
     lines.append("")
 
     if ci_lower <= 0 <= ci_upper:
-
         lines.append(
-            "Доверительный интервал включает 0."
+            "  Интервал накрывает 0 — значит, реальная разница может быть "
+            "нулевой. Это согласуется с отсутствием значимости."
         )
-
-        lines.append(
-            "Это согласуется с отсутствием "
-            "статистически значимого различия."
-        )
-
     else:
-
         lines.append(
-            "Доверительный интервал не включает 0."
+            "  Интервал не накрывает 0 — значит, реальная разница, скорее "
+            "всего, не равна нулю. Это согласуется со значимым результатом."
         )
-
-        lines.append(
-            "Это согласуется с наличием "
-            "статистически значимого различия."
-        )
-
     lines.append("")
+
+    # --------------------------------------------------
+    # Вердикт
+    # --------------------------------------------------
+    lines.append("=" * 60)
+    lines.append("ИТОГ")
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append(f"  {title}")
+    lines.append("")
+    lines.append(f"  {action}")
+    lines.append("")
+    lines.append("=" * 60)
 
     return "\n".join(lines)
 
 
-def save_interpretation(
-    run_path,
-    report
-):
+# =========================
+# Сохранение
+# =========================
+
+def save_interpretation(run_path, report):
     output_path = Path(run_path) / "summary.txt"
-
-    with open(
-        output_path,
-        "w",
-        encoding="utf-8"
-    ) as file:
-
+    with open(output_path, "w", encoding="utf-8") as file:
         file.write(report)
-
     return output_path

@@ -118,6 +118,23 @@ class TestDataQuality(unittest.TestCase):
             self.get_check(checks, "sample_ratio_mismatch")["status"], "FAIL"
         )
 
+    def test_user_in_both_groups_fails(self):
+        """Проверяет, что один пользователь не попал в группы A и B."""
+        df = pd.concat([
+            self.valid_df,
+            pd.DataFrame({
+                "user_id": [1],
+                "group": ["B"],
+                "converted_observed": [1],
+            }),
+        ], ignore_index=True)
+
+        passed, checks = self.run_checks(df)
+
+        self.assertFalse(passed)
+        self.assertEqual(
+            self.get_check(checks, "unique_user_id")["status"], "FAIL"
+        )    
 
 if __name__ == "__main__":
     unittest.main()
